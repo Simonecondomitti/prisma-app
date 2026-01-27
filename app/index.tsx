@@ -16,6 +16,6 @@ export default function Index() {
   if (!user) return <Redirect href="/(auth)/login" />;
 
   return user.role === "client"
-    ? <Redirect href="/(client)/home" />
-    : <Redirect href="/(pt)/home" />;
+    ? <Redirect href="/(client-tabs)/home" />
+    : <Redirect href="/(pt-tabs)/home" />;
 }
