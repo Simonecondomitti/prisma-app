@@ -1,0 +1,73 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+
+export type Role = "client" | "pt";
+
+export type AuthUser = {
+  id: string;
+  name: string;
+  role: Role;
+};
+
+type AuthContextValue = {
+  user: AuthUser | null;
+  isHydrating: boolean; // mentre ripristina da storage
+  loginAs: (role: Role) => Promise<void>;
+  logout: () => Promise<void>;
+};
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+const STORAGE_KEY = "palestra_app_user_v1";
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isHydrating, setIsHydrating] = useState(true);
+
+  // 1) All'avvio: leggi da storage e ripristina user
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed: AuthUser = JSON.parse(raw);
+          setUser(parsed);
+        }
+      } catch (e) {
+        // se storage corrotto, riparti pulito
+        await AsyncStorage.removeItem(STORAGE_KEY);
+        setUser(null);
+      } finally {
+        setIsHydrating(false);
+      }
+    })();
+  }, []);
+
+  // 2) Login: set user + salva
+  const loginAs = async (role: Role) => {
+    const mockUser: AuthUser = {
+      id: role === "pt" ? "pt_1" : "client_1",
+      name: role === "pt" ? "Simone PT" : "Simone Cliente",
+      role,
+    };
+
+    setUser(mockUser);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(mockUser));
+  };
+
+  // 3) Logout: reset + cancella
+  const logout = async () => {
+    setUser(null);
+    await AsyncStorage.removeItem(STORAGE_KEY);
+  };
+
+  const value = useMemo(() => ({ user, isHydrating, loginAs, logout }), [user, isHydrating]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  return ctx;
+}
