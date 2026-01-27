@@ -33,7 +33,7 @@ export default function ClientHomeTab() {
                     <RowLink
                         title="Apri scheda"
                         subtitle="Vai ai giorni di allenamento"
-                        onPress={() => router.push("/(client)/home")}
+                        onPress={() => router.push("/exercises")}
                     />
                 ) : null}
             </Screen>

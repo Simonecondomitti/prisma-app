@@ -3,7 +3,12 @@ import { Tabs } from "expo-router";
 
 export default function PtTabsLayout() {
   return (
-    <Tabs screenOptions={{ headerShown: false }}>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: { display: "none" }, // hide built-in tab bar in favor of global footer
+      }}
+    >
       <Tabs.Screen
         name="home"
         options={{

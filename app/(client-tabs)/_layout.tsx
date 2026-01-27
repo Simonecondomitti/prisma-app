@@ -7,6 +7,7 @@ export default function ClientTabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: "#111",
+        tabBarStyle: { display: "none" }, // hide built-in tab bar in favor of global footer
       }}
     >
       <Tabs.Screen
