@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Client, MOCK_CLIENTS } from "../mock/clients";
 import { WorkoutExercise } from "../mock/workout";
 
@@ -17,8 +18,10 @@ type PtStoreValue = {
   removeExercise: (clientId: string, dayId: string, exerciseId: string) => void;
   addDay: (clientId: string, weekdayKey: string, weekdayLabel: string) => string; removeDay: (clientId: string, dayId: string) => void;
   updateDayTitle: (clientId: string, dayId: string, title: string) => void;
+  isHydrating: boolean;
+  resetStore: () => Promise<void>;
 };
-
+const STORAGE_KEY = "palestra_app_ptstore_clients_v1";
 const PtStoreContext = createContext<PtStoreValue | undefined>(undefined);
 
 function deepClone<T>(obj: T): T {
@@ -26,8 +29,37 @@ function deepClone<T>(obj: T): T {
 }
 
 export function PtStoreProvider({ children }: { children: React.ReactNode }) {
-  const [clients, setClients] = useState<Client[]>(deepClone(MOCK_CLIENTS));
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isHydrating, setIsHydrating] = useState(true);
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed: Client[] = JSON.parse(raw);
+          setClients(parsed);
+        } else {
+          setClients(deepClone(MOCK_CLIENTS));
+        }
+      } catch {
+        // se storage corrotto, riparti dai mock
+        setClients(deepClone(MOCK_CLIENTS));
+        await AsyncStorage.removeItem(STORAGE_KEY);
+      } finally {
+        setIsHydrating(false);
+      }
+    })();
+  }, []);
 
+  useEffect(() => {
+    if (isHydrating) return;
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(clients));
+  }, [clients, isHydrating]);
+
+  const resetStore = async () => {
+    setClients(deepClone(MOCK_CLIENTS));
+    await AsyncStorage.removeItem(STORAGE_KEY);
+  };
   const getClientById = (id: string) => clients.find((c) => c.id === id) ?? null;
 
   const updateExercise: PtStoreValue["updateExercise"] = (clientId, dayId, exerciseId, patch) => {
@@ -136,9 +168,20 @@ export function PtStoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ clients, getClientById, updateExercise, addExercise, removeExercise, addDay, removeDay, updateDayTitle }),
-    [clients]
-  );
+  () => ({
+    clients,
+    isHydrating,
+    resetStore,
+    getClientById,
+    updateExercise,
+    addExercise,
+    removeExercise,
+    addDay,
+    removeDay,
+    updateDayTitle,
+  }),
+  [clients, isHydrating]
+);
 
   return <PtStoreContext.Provider value={value}>{children}</PtStoreContext.Provider>;
 }

@@ -14,7 +14,8 @@ function numOr(value: string, fallback: number) {
 
 export default function PtEditDay() {
     const { clientId, dayId } = useLocalSearchParams<{ clientId: string; dayId: string }>();
-    const { getClientById, updateExercise, addExercise, removeExercise, updateDayTitle } = usePtStore();
+    const { getClientById, updateExercise, addExercise, removeExercise, updateDayTitle, isHydrating } = usePtStore();
+    if (isHydrating) return null;
 
     const client = getClientById(String(clientId));
     const day = client?.planDays.find((d) => d.id === String(dayId)) ?? null;

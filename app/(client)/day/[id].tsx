@@ -16,7 +16,8 @@ function formatRest(sec: number) {
 
 export default function ClientDayDetail() {
   const { user } = useAuth();
-  const { getClientById } = usePtStore();
+  const { getClientById, isHydrating } = usePtStore();
+  if (isHydrating) return null;
   const client = user ? getClientById(user.id) : null;
   const { id } = useLocalSearchParams<{ id: string }>();
   const day = client?.planDays.find(d => d.id === String(id)) ?? null;

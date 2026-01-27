@@ -8,7 +8,8 @@ import { router, useLocalSearchParams } from "expo-router";
 
 export default function PtAddExercise() {
   const { clientId, dayId } = useLocalSearchParams<{ clientId: string; dayId: string }>();
-  const { addExercise } = usePtStore();
+  const { addExercise, isHydrating } = usePtStore();
+  if (isHydrating) return null;
 
   return (
     <RequireAuth role="pt">

@@ -10,7 +10,8 @@ import { Screen } from "../../src/ui/screen";
 
 export default function PtClientDetail() {
     const { id } = useLocalSearchParams<{ id: string }>();
-    const { getClientById, addDay, removeDay } = usePtStore();
+    const { getClientById, addDay, removeDay, isHydrating } = usePtStore();
+    if (isHydrating) return null;
     const client = getClientById(String(id));
     return (
         <RequireAuth role="pt">

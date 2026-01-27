@@ -10,7 +10,8 @@ import { Screen } from "../src/ui/screen";
 
 export default function PtHome() {
   const { user, logout } = useAuth();
-  const { clients } = usePtStore();
+  const { clients, isHydrating } = usePtStore();
+  if (isHydrating) return null;
 
   return (
     <RequireAuth role="pt">

@@ -29,7 +29,8 @@ export default function ExerciseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const { user } = useAuth();
-  const { getClientById } = usePtStore();
+  const { getClientById, isHydrating } = usePtStore();
+  if (isHydrating) return null;
 
   const client = user ? getClientById(user.id) : null;
   const ex = client ? findExerciseById(client.planDays, String(id)) : null;

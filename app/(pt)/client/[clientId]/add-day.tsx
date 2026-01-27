@@ -18,7 +18,8 @@ const WEEKDAYS = [
 
 export default function PtAddDay() {
   const { clientId } = useLocalSearchParams<{ clientId: string }>();
-  const { getClientById, addDay } = usePtStore();
+  const { getClientById, addDay, isHydrating } = usePtStore();
+  if (isHydrating) return null;
 
   const client = getClientById(String(clientId));
 
