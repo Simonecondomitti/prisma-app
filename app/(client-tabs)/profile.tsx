@@ -8,7 +8,7 @@ export default function ClientProfileTab() {
 
     return (
         <Screen>
-            <Text style={{ fontSize: 24, fontWeight: "800" }}>Profilo</Text>
+            <Text style={{ fontSize: 24, fontWeight: "800", color: "#ffffffff" }}>Profilo</Text>
 
             <Pressable
                 onPress={async () => {
@@ -16,14 +16,14 @@ export default function ClientProfileTab() {
                     router.replace("/(auth)/login");
                 }}
                 style={{
-                    backgroundColor: "#111",
+                    backgroundColor: "#ffffffff",
                     padding: 14,
                     borderRadius: 12,
                     alignItems: "center",
                     marginTop: 10,
                 }}
             >
-                <Text style={{ color: "#fff", fontWeight: "700" }}>Logout</Text>
+                <Text style={{ color: "#000000ff", fontWeight: "700" }}>Logout</Text>
             </Pressable>
         </Screen>
     );

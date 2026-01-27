@@ -22,8 +22,8 @@ export default function ClientHomeTab() {
                 <AppHeader title={`Ciao ${user?.name ?? ""}`} subtitle="Home" />
 
                 <Card>
-                    <Text style={{ fontWeight: "800", fontSize: 16 }}>La tua scheda</Text>
-                    <Text style={{ color: "#444", marginTop: 6 }}>
+                    <Text style={{ fontWeight: "800", fontSize: 16, color: "#ffffffff" }}>La tua scheda</Text>
+                    <Text style={{ color: "#ffffffff", marginTop: 6 }}>
                         {client ? `${client.planDays.length} giorni disponibili` : "Nessuna scheda trovata"}
                     </Text>
                 </Card>

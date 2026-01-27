@@ -1,5 +1,4 @@
 import { router } from "expo-router";
-import { Pressable, Text } from "react-native";
 import { useAuth } from "../src/auth/authContext";
 import { RequireAuth } from "../src/auth/requireAuth";
 import { usePtStore } from "../src/pt/PtStore";
@@ -30,22 +29,6 @@ export default function ClientHome() {
             onPress={() => router.push(`/(client)/day/${day.id}`)}
           />
         ))}
-
-        <Pressable
-          onPress={async () => {
-            await logout();
-            router.replace("/(auth)/login");
-          }}
-          style={{
-            backgroundColor: "#111",
-            padding: 14,
-            borderRadius: 12,
-            alignItems: "center",
-            marginTop: 10,
-          }}
-        >
-          <Text style={{ color: "#fff", fontWeight: "700" }}>Logout</Text>
-        </Pressable>
       </Screen>
     </RequireAuth>
   );

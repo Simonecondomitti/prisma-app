@@ -125,17 +125,14 @@ export default function LoginScreen() {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={{
-                paddingVertical: 12,
-                borderRadius: 999,
-                alignItems: "center",
-
-                // glow esterno
-                shadowColor: "#00C2FF",
-                shadowOpacity: 0.45,
-                shadowRadius: 16,
-                shadowOffset: { width: 0, height: 8 },
-                elevation: 12,
-              }}
+                  paddingVertical: 12,
+                  borderRadius: 999,
+                  alignItems: "center",
+  
+                  // glow esterno
+                  borderWidth: 1,
+                  borderColor: "#FFFFFF",
+                }}
             >
               {/* highlight lucido */}
               <View
@@ -154,11 +151,9 @@ export default function LoginScreen() {
               <Text
                 style={{
                   color: "#FFFFFF",
-                  fontSize: 22,          // 🔥 dimensione richiesta
-                  fontWeight: "900",
-                  letterSpacing: 3,
-
-                  // ✨ text shadow
+                  fontSize: 22,
+                  fontWeight: "800",
+                  letterSpacing: 2,
                   textShadowColor: "rgba(7, 1, 1, 0.9)",
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 4,

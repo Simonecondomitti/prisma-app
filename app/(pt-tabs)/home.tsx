@@ -14,7 +14,7 @@ export default function PtHomeTab() {
                 <AppHeader title={`Ciao ${user?.name ?? ""}`} subtitle="Home PT" />
 
                 <Card>
-                    <Text style={{ color: "#444" }}>
+                    <Text style={{ color: "#ffffffff" }}>
                         Qui metteremo in seguito dashboard, appuntamenti, riepilogo schede, ecc.
                     </Text>
                 </Card>
