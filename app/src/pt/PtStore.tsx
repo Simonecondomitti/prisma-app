@@ -21,11 +21,35 @@ type PtStoreValue = {
   isHydrating: boolean;
   resetStore: () => Promise<void>;
 };
+const STORE_VERSION = 1; // quando cambi schema -> 2, 3, ...
 const STORAGE_KEY = "palestra_app_ptstore_clients_v1";
 const PtStoreContext = createContext<PtStoreValue | undefined>(undefined);
 
 function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
+}
+
+type PersistedStore = {
+  version: number;
+  clients: Client[];
+};
+
+function migrate(payload: any): PersistedStore {
+  // Caso legacy: in passato hai salvato direttamente Client[]
+  if (Array.isArray(payload)) {
+    return { version: 1, clients: payload };
+  }
+
+  const version = payload?.version ?? 1;
+  let clients: Client[] = payload?.clients ?? [];
+
+  // 👉 Qui in futuro aggiungerai migrazioni tipo:
+  // if (version === 1) {
+  //   clients = clients.map(c => ({ ...c, newField: default }))
+  //   return { version: 2, clients };
+  // }
+
+  return { version, clients };
 }
 
 export function PtStoreProvider({ children }: { children: React.ReactNode }) {
@@ -36,8 +60,9 @@ export function PtStoreProvider({ children }: { children: React.ReactNode }) {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
-          const parsed: Client[] = JSON.parse(raw);
-          setClients(parsed);
+          const parsed = JSON.parse(raw);
+          const migrated = migrate(parsed);
+          setClients(migrated.clients);
         } else {
           setClients(deepClone(MOCK_CLIENTS));
         }
@@ -53,7 +78,7 @@ export function PtStoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isHydrating) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(clients));
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ version: STORE_VERSION, clients }));
   }, [clients, isHydrating]);
 
   const resetStore = async () => {
