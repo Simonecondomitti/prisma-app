@@ -4,6 +4,7 @@ import { AppHeader } from "@/app/src/ui/appHeader";
 import { RowLink } from "@/app/src/ui/rowLink";
 import { Screen } from "@/app/src/ui/screen";
 import { router, useLocalSearchParams } from "expo-router";
+import { Alert } from "react-native";
 
 function formatRest(sec: number) {
   if (sec < 60) return `${sec}s`;
@@ -15,7 +16,7 @@ function formatRest(sec: number) {
 export default function PtClientDayDetail() {
   const { clientId, dayId } = useLocalSearchParams<{ clientId: string; dayId: string }>();
 
-  const { getClientById } = usePtStore();
+  const { getClientById, removeDay } = usePtStore();
   const client = getClientById(String(clientId));
   const day = client?.planDays.find((d) => d.id === String(dayId)) ?? null;
 
@@ -32,6 +33,27 @@ export default function PtClientDayDetail() {
               pathname: "/(pt)/client/[clientId]/edit/[dayId]",
               params: { clientId: String(clientId), dayId: String(dayId) },
             })
+          }
+        />
+        <RowLink
+          title="🗑️ Elimina questo giorno"
+          subtitle="Rimuove giorno e esercizi"
+          onPress={() =>
+            Alert.alert(
+              "Eliminare giorno?",
+              "Questa azione non si può annullare.",
+              [
+                { text: "Annulla", style: "cancel" },
+                {
+                  text: "Elimina",
+                  style: "destructive",
+                  onPress: () => {
+                    removeDay(String(clientId), String(dayId));
+                    router.back(); // torna al cliente
+                  },
+                },
+              ]
+            )
           }
         />
         {!day ? null : (

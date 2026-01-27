@@ -10,7 +10,7 @@ import { Screen } from "../../src/ui/screen";
 
 export default function PtClientDetail() {
     const { id } = useLocalSearchParams<{ id: string }>();
-    const { getClientById } = usePtStore();
+    const { getClientById, addDay, removeDay } = usePtStore();
     const client = getClientById(String(id));
     return (
         <RequireAuth role="pt">
@@ -30,7 +30,11 @@ export default function PtClientDetail() {
                         </Card>
 
                         <AppHeader title="Scheda" subtitle="Seleziona un giorno" />
-
+                        <RowLink
+                            title="+ Aggiungi giorno"
+                            subtitle="Seleziona giorno della settimana"
+                            onPress={() => router.push(`/(pt)/client/${client.id}/add-day`)}
+                        />
                         {client.planDays.map((day) => (
                             <RowLink
                                 key={day.id}

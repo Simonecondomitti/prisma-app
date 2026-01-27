@@ -12,12 +12,30 @@ export type AuthUser = {
 type AuthContextValue = {
   user: AuthUser | null;
   isHydrating: boolean; // mentre ripristina da storage
-  loginAs: (role: Role) => Promise<void>;
+  login: (username: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
 };
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "palestra_app_user_v1";
+
+type MockAccount = {
+  username: string;
+  password: string;
+  id: string;      // per client deve essere c1/c2/c3 (come i Client mock)
+  name: string;
+  role: Role;
+};
+
+const MOCK_ACCOUNTS: MockAccount[] = [
+  { username: "pt", password: "pt123", id: "pt_1", name: "Cosimo PT", role: "pt" },
+
+  // clienti (id = clientId del PtStore!)
+  { username: "c1", password: "c1123", id: "c1", name: "Mario Rossi", role: "client" },
+  { username: "c2", password: "c2123", id: "c2", name: "Luigi Bianchi", role: "client" },
+  { username: "c3", password: "c3123", id: "c3", name: "Giulia Verdi", role: "client" },
+  { username: "simone", password: "simone", id: "simone", name: "Simone Cliente", role: "client" },
+];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -43,15 +61,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // 2) Login: set user + salva
-  const loginAs = async (role: Role) => {
+  const login = async (username: string, password: string) => {
+    const account = MOCK_ACCOUNTS.find(
+      (a) => a.username === username.trim() && a.password === password
+    );
+
+    if (!account) return false;
+
     const mockUser: AuthUser = {
-      id: role === "pt" ? "pt_1" : "c1", // <-- qui
-      name: role === "pt" ? "Cosimo PT" : "Simone Cliente",
-      role,
+      id: account.id,
+      name: account.name,
+      role: account.role,
     };
 
     setUser(mockUser);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(mockUser));
+    return true;
   };
 
   // 3) Logout: reset + cancella
@@ -60,8 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeItem(STORAGE_KEY);
   };
 
-  const value = useMemo(() => ({ user, isHydrating, loginAs, logout }), [user, isHydrating]);
-
+  const value = useMemo(() => ({ user, isHydrating, login, logout }), [user, isHydrating]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

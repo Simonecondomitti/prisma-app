@@ -11,7 +11,7 @@ export type Client = {
 export const MOCK_CLIENTS: Client[] = [
   {
     id: "c1",
-    name: "Simone Cliente",
+    name: "Mario Rossi",
     status: "active",
     notes: "Obiettivo: massa • 4x/settimana",
     planDays: MOCK_DAYS,
@@ -29,6 +29,13 @@ export const MOCK_CLIENTS: Client[] = [
     status: "paused",
     notes: "Pausa per spalla",
     planDays: MOCK_DAYS.slice(0, 1),
+  },
+  {
+    id: "simone",
+    name: "Simone Cliente",
+    status: "active",
+    notes: "Cliente di test",
+    planDays: MOCK_DAYS,
   },
 ];
 

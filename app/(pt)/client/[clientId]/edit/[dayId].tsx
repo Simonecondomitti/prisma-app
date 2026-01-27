@@ -5,7 +5,7 @@ import { Card } from "@/app/src/ui/card";
 import { Screen } from "@/app/src/ui/screen";
 import { theme } from "@/app/src/ui/theme";
 import { router, useLocalSearchParams } from "expo-router";
-import { Pressable, Text, TextInput } from "react-native";
+import { Alert, Pressable, Text, TextInput } from "react-native";
 
 function numOr(value: string, fallback: number) {
     const n = Number(value);
@@ -14,7 +14,7 @@ function numOr(value: string, fallback: number) {
 
 export default function PtEditDay() {
     const { clientId, dayId } = useLocalSearchParams<{ clientId: string; dayId: string }>();
-    const { getClientById, updateExercise, addExercise } = usePtStore();
+    const { getClientById, updateExercise, addExercise, removeExercise, updateDayTitle } = usePtStore();
 
     const client = getClientById(String(clientId));
     const day = client?.planDays.find((d) => d.id === String(dayId)) ?? null;
@@ -127,6 +127,25 @@ export default function PtEditDay() {
                                     }}
                                     placeholder="Note facoltative"
                                 />
+                                <Pressable
+                                    onPress={() =>
+                                        Alert.alert(
+                                            "Rimuovere esercizio?",
+                                            ex.name,
+                                            [
+                                                { text: "Annulla", style: "cancel" },
+                                                {
+                                                    text: "Rimuovi",
+                                                    style: "destructive",
+                                                    onPress: () => removeExercise(client.id, day.id, ex.id),
+                                                },
+                                            ]
+                                        )
+                                    }
+                                    style={{ marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: "#eee" }}
+                                >
+                                    <Text style={{ color: "#111", fontWeight: "800" }}>🗑️ Rimuovi esercizio</Text>
+                                </Pressable>
                             </Card>
                         ))}
 
