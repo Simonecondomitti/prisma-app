@@ -15,7 +15,6 @@ type AuthContextValue = {
   loginAs: (role: Role) => Promise<void>;
   logout: () => Promise<void>;
 };
-
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "palestra_app_user_v1";
@@ -46,8 +45,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // 2) Login: set user + salva
   const loginAs = async (role: Role) => {
     const mockUser: AuthUser = {
-      id: role === "pt" ? "pt_1" : "client_1",
-      name: role === "pt" ? "Simone PT" : "Simone Cliente",
+      id: role === "pt" ? "pt_1" : "c1", // <-- qui
+      name: role === "pt" ? "Cosimo PT" : "Simone Cliente",
       role,
     };
 

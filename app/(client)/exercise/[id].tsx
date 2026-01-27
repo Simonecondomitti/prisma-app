@@ -1,13 +1,17 @@
-import { RequireAuth } from "@/app/src/auth/requireAuth";
-import { MOCK_DAYS } from "@/app/src/mock/workout";
-import { AppHeader } from "@/app/src/ui/appHeader";
-import { Card } from "@/app/src/ui/card";
-import { Screen } from "@/app/src/ui/screen";
 import { useLocalSearchParams } from "expo-router";
 import { Text, View } from "react-native";
 
-function findExerciseById(id: string) {
-  for (const day of MOCK_DAYS) {
+import { useAuth } from "@/app/src/auth/authContext";
+import { RequireAuth } from "@/app/src/auth/requireAuth";
+import { usePtStore } from "@/app/src/pt/PtStore";
+
+import type { WorkoutDay } from "@/app/src/mock/workout";
+import { AppHeader } from "@/app/src/ui/appHeader";
+import { Card } from "@/app/src/ui/card";
+import { Screen } from "@/app/src/ui/screen";
+
+function findExerciseById(days: WorkoutDay[], id: string) {
+  for (const day of days) {
     const found = day.exercises.find((e) => e.id === id);
     if (found) return found;
   }
@@ -23,7 +27,12 @@ function formatRest(sec: number) {
 
 export default function ExerciseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const ex = findExerciseById(String(id));
+
+  const { user } = useAuth();
+  const { getClientById } = usePtStore();
+
+  const client = user ? getClientById(user.id) : null;
+  const ex = client ? findExerciseById(client.planDays, String(id)) : null;
 
   return (
     <RequireAuth role="client">

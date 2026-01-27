@@ -2,14 +2,17 @@ import { router } from "expo-router";
 import { Pressable, Text } from "react-native";
 import { useAuth } from "../src/auth/authContext";
 import { RequireAuth } from "../src/auth/requireAuth";
-import { MOCK_DAYS } from "../src/mock/workout";
+import { usePtStore } from "../src/pt/PtStore";
 import { AppHeader } from "../src/ui/appHeader";
 import { RowLink } from "../src/ui/rowLink";
 import { Screen } from "../src/ui/screen";
 
 export default function ClientHome() {
   const { user, logout } = useAuth();
+  const { getClientById } = usePtStore();
 
+  const client = user ? getClientById(user.id) : null;
+  const days = client?.planDays ?? [];
   return (
     <RequireAuth role="client">
       <Screen>
@@ -18,7 +21,7 @@ export default function ClientHome() {
           subtitle={`Ciao ${user?.name}. Seleziona un giorno.`}
         />
 
-        {MOCK_DAYS.map((day) => (
+        {days.map((day) => (
           <RowLink
             key={day.id}
             title={day.title}

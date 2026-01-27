@@ -1,29 +1,41 @@
 import { router } from "expo-router";
-import { Pressable, Text, View } from "react-native";
+
 import { useAuth } from "../src/auth/authContext";
 import { RequireAuth } from "../src/auth/requireAuth";
 
+import { usePtStore } from "../src/pt/PtStore";
+import { AppHeader } from "../src/ui/appHeader";
+import { RowLink } from "../src/ui/rowLink";
+import { Screen } from "../src/ui/screen";
+
 export default function PtHome() {
   const { user, logout } = useAuth();
+  const { clients } = usePtStore();
 
   return (
     <RequireAuth role="pt">
-      <View style={{ flex: 1, backgroundColor: "#fff", padding: 24, justifyContent: "center", gap: 12 }}>
-        <Text style={{ fontSize: 28, fontWeight: "700", color: "#111" }}>Home PT</Text>
-        <Text style={{ fontSize: 16, color: "#444" }}>
-          Utente: {user?.name} ({user?.id}) — ruolo: {user?.role}
-        </Text>
+      <Screen>
+        <AppHeader title="Clienti" subtitle={`Ciao ${user?.name}.`} />
 
-        <Pressable
-          onPress={() => {
-            logout();
+        {clients.map((c) => (
+          <RowLink
+            key={c.id}
+            title={c.name}
+            subtitle={c.notes ?? ""}
+            right={c.status === "active" ? "Attivo" : "In pausa"}
+            onPress={() => router.push(`/(pt)/client/${c.id}`)}
+          />
+        ))}
+
+        <RowLink
+          title="Logout"
+          subtitle="Esci dall’area PT"
+          onPress={async () => {
+            await logout();
             router.replace("/(auth)/login");
           }}
-          style={{ backgroundColor: "#111", padding: 14, borderRadius: 12, alignItems: "center" }}
-        >
-          <Text style={{ fontSize: 16, fontWeight: "600", color: "#fff" }}>Logout</Text>
-        </Pressable>
-      </View>
+        />
+      </Screen>
     </RequireAuth>
   );
 }

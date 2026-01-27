@@ -1,5 +1,6 @@
+import { useAuth } from "@/app/src/auth/authContext";
 import { RequireAuth } from "@/app/src/auth/requireAuth";
-import { getDayById } from "@/app/src/mock/workout";
+import { usePtStore } from "@/app/src/pt/PtStore";
 import { AppHeader } from "@/app/src/ui/appHeader";
 import { RowLink } from "@/app/src/ui/rowLink";
 import { Screen } from "@/app/src/ui/screen";
@@ -14,8 +15,11 @@ function formatRest(sec: number) {
 }
 
 export default function ClientDayDetail() {
+  const { user } = useAuth();
+  const { getClientById } = usePtStore();
+  const client = user ? getClientById(user.id) : null;
   const { id } = useLocalSearchParams<{ id: string }>();
-  const day = getDayById(String(id));
+  const day = client?.planDays.find(d => d.id === String(id)) ?? null;
 
   return (
     <RequireAuth role="client">
