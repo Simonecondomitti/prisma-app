@@ -1,8 +1,10 @@
 import { router } from "expo-router";
+import React from "react";
 import { Text } from "react-native";
 import { useAuth } from "../src/auth/authContext";
 import { RequireAuth } from "../src/auth/requireAuth";
 import { usePtStore } from "../src/pt/PtStore";
+import { debugListMyExercises } from "../src/supabase/db";
 import { AppHeader } from "../src/ui/appHeader";
 import { Card } from "../src/ui/card";
 import { RowLink } from "../src/ui/rowLink";
@@ -15,7 +17,9 @@ export default function ClientHomeTab() {
     const client = user ? getClientById(user.id) : null;
 
     if (isHydrating) return null;
-
+    React.useEffect(() => {
+        debugListMyExercises();
+    }, []);
     return (
         <RequireAuth role="client">
             <Screen>

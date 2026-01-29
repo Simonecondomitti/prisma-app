@@ -64,3 +64,28 @@ export async function listDaysByClient(clientId: string) {
   if (error) throw error;
   return (data ?? []) as DbDay[];
 }
+
+export async function debugListMyExercises() {
+  const { data: me } = await supabase.auth.getUser();
+  console.log("[debugListMyExercises] user", me?.user?.id);
+
+  const { data, error } = await supabase
+    .from("workout_exercises")
+    .select("id, day_id, name, sets, reps, rest_sec, position")
+    .order("created_at", { ascending: false });
+
+  console.log("[debugListMyExercises] data", data);
+  console.log("[debugListMyExercises] error", error);
+
+  return { data, error };
+}
+
+export async function deleteExercise(exerciseId: string) {
+  const { error } = await supabase
+    .from("workout_exercises")
+    .delete()
+    .eq("id", exerciseId);
+
+  if (error) throw error;
+  return true;
+}

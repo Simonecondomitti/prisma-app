@@ -1,15 +1,15 @@
-import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
-
 import { useAuth } from "@/app/src/auth/authContext";
 import { RequireAuth } from "@/app/src/auth/requireAuth";
-import { usePtStore } from "@/app/src/pt/PtStore";
+import { supabase } from "@/app/src/supabase/client";
+import { deleteExercise } from "@/app/src/supabase/db";
 import { AppHeader } from "@/app/src/ui/appHeader";
 import { Card } from "@/app/src/ui/card";
 import { Screen } from "@/app/src/ui/screen";
 import { theme } from "@/app/src/ui/theme";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import React from "react";
+import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 
 type WeekdayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
@@ -23,16 +23,43 @@ const WEEK: { key: WeekdayKey; label: string }[] = [
   { key: "sun", label: "Dom" },
 ];
 
+type DbClientRow = {
+  id: string;
+  name: string;
+};
+
+type DbDayRow = {
+  id: string;
+  client_id: string;
+  title: string;
+  weekday_key: string | null;
+  position: number;
+};
+
+type DbExerciseRow = {
+  id: string;
+  day_id: string;
+  name: string;
+  sets: number;
+  reps: string;
+  rest_sec: number;
+  notes: string | null;
+  position: number;
+};
+
 export default function ClientExercisesTab() {
   const { user } = useAuth();
-  const { getClientById, isHydrating } = usePtStore();
 
   // ✅ hooks ALWAYS before any return
   const [selectedDay, setSelectedDay] = React.useState<WeekdayKey>("mon");
   const [actionsOpen, setActionsOpen] = React.useState(false);
   const [activeExerciseId, setActiveExerciseId] = React.useState<string | null>(null);
 
-  const client = user ? getClientById(user.id) : null;
+  // Data from Supabase
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [client, setClient] = React.useState<DbClientRow | null>(null);
+  const [days, setDays] = React.useState<DbDayRow[]>([]);
+  const [exercises, setExercises] = React.useState<DbExerciseRow[]>([]);
 
   function openActions(exerciseId: string) {
     setActiveExerciseId(exerciseId);
@@ -46,7 +73,6 @@ export default function ClientExercisesTab() {
 
   function onEdit() {
     if (!activeExerciseId) return;
-    console.log("MODIFICA", activeExerciseId);
 
     router.push({
       pathname: "/(client-tabs)/exercises/exercise/[exerciseId]",
@@ -59,30 +85,138 @@ export default function ClientExercisesTab() {
     closeActions();
   }
 
-  function onDelete() {
+  async function onDelete() {
     if (!activeExerciseId) return;
-    console.log("ELIMINA", activeExerciseId);
 
-    // TODO: in step successivo colleghiamo delete sullo store / db
+    const idToDelete = String(activeExerciseId);
 
-    closeActions();
+    try {
+      // elimina in DB
+      await deleteExercise(idToDelete);
+
+      // aggiorna UI senza refetch
+      setExercises((prev) => prev.filter((e) => e.id !== idToDelete));
+    } catch (error) {
+      console.log("[client] delete error", error);
+    } finally {
+      closeActions();
+    }
   }
 
-  // Map day selection to your planDays (supports either d.weekday OR d.id)
-  const day =
-    client?.planDays?.find((d: any) => d.weekday === selectedDay) ??
-    client?.planDays?.find((d: any) => d.id === selectedDay) ??
-    null;
+  // 1) Carica il client associato all'utente loggato (clients.client_user_id = user.id)
+  React.useEffect(() => {
+    let alive = true;
 
-  const exercises = day?.exercises ?? [];
+    (async () => {
+      try {
+        setIsLoading(true);
+
+        if (!user?.id) {
+          if (!alive) return;
+          setClient(null);
+          setDays([]);
+          setExercises([]);
+          return;
+        }
+
+        const { data: c, error: cErr } = await supabase
+          .from("clients")
+          .select("id,name")
+          .eq("client_user_id", user.id)
+          .single();
+
+        if (!alive) return;
+
+        if (cErr) {
+          console.log("[client] load client error", cErr);
+          setClient(null);
+          setDays([]);
+          setExercises([]);
+          return;
+        }
+
+        setClient(c as DbClientRow);
+
+        const { data: d, error: dErr } = await supabase
+          .from("workout_days")
+          .select("id,client_id,title,weekday_key,position")
+          .eq("client_id", (c as DbClientRow).id)
+          .order("position", { ascending: true })
+          .order("created_at", { ascending: true });
+
+        if (!alive) return;
+
+        if (dErr) {
+          console.log("[client] load days error", dErr);
+          setDays([]);
+          setExercises([]);
+          return;
+        }
+
+        setDays((d ?? []) as DbDayRow[]);
+      } finally {
+        if (alive) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [user?.id]);
+
+  // 2) Ogni volta che cambia selectedDay o days, carica gli esercizi del day attivo
+  React.useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        if (!client?.id) return;
+
+        const activeDay = days.find((d) => d.weekday_key === selectedDay) ?? null;
+        if (!activeDay) {
+          setExercises([]);
+          return;
+        }
+
+        const { data: ex, error: exErr } = await supabase
+          .from("workout_exercises")
+          .select("id,day_id,name,sets,reps,rest_sec,notes,position")
+          .eq("day_id", activeDay.id)
+          .order("position", { ascending: true })
+          .order("created_at", { ascending: true });
+
+        if (!alive) return;
+
+        if (exErr) {
+          console.log("[client] load exercises error", exErr);
+          setExercises([]);
+          return;
+        }
+
+        setExercises((ex ?? []) as DbExerciseRow[]);
+      } catch (e) {
+        console.log("[client] load exercises unexpected", e);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [client?.id, days, selectedDay]);
 
   return (
     <RequireAuth role="client">
       <Screen>
         <AppHeader title="La tua scheda" subtitle="Ultimo aggiornamento" />
 
-        {isHydrating ? (
-          <Text style={{ color: theme.colors.subtext }}>Caricamento...</Text>
+        {isLoading ? (
+          <Text style={{ color: theme.colors.subtext, paddingHorizontal: 16, marginTop: 8 }}>
+            Caricamento...
+          </Text>
+        ) : !client ? (
+          <Text style={{ color: theme.colors.subtext, paddingHorizontal: 16, marginTop: 8 }}>
+            Nessun cliente collegato a questo account.
+          </Text>
         ) : (
           <>
             {/* 7 tab giorni */}
@@ -115,7 +249,7 @@ export default function ClientExercisesTab() {
               })}
             </ScrollView>
 
-            {/* + aggiungi esercizio */}
+            {/* + aggiungi esercizio (client: solo placeholder per ora) */}
             <View style={{ paddingHorizontal: 16, marginTop: 6 }}>
               <Pressable
                 onPress={() => {
@@ -142,7 +276,7 @@ export default function ClientExercisesTab() {
               {exercises.length === 0 ? (
                 <Text style={{ color: theme.colors.subtext }}>Nessun esercizio per questo giorno.</Text>
               ) : (
-                exercises.map((ex: any) => (
+                exercises.map((ex) => (
                   <Pressable
                     key={ex.id}
                     onPress={() => {
@@ -180,13 +314,11 @@ export default function ClientExercisesTab() {
                           </Text>
 
                           <Text style={{ color: theme.colors.subtext, marginTop: 6 }}>
-                            {ex.sets} serie × {ex.reps} reps • Rec {ex.restSec}s
+                            {ex.sets} serie × {ex.reps} reps • Rec {ex.rest_sec}s
                           </Text>
 
                           {ex.notes ? (
-                            <Text style={{ color: theme.colors.subtext, marginTop: 6 }}>
-                              Note: {ex.notes}
-                            </Text>
+                            <Text style={{ color: theme.colors.subtext, marginTop: 6 }}>Note: {ex.notes}</Text>
                           ) : null}
                         </View>
 
@@ -194,7 +326,6 @@ export default function ClientExercisesTab() {
                         <Pressable
                           onPress={(e: any) => {
                             e?.stopPropagation?.();
-                            console.log("APRI AZIONI ESERCIZIO", ex.id);
                             openActions(String(ex.id));
                           }}
                           style={{ padding: 6 }}

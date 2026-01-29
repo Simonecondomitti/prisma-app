@@ -1,92 +1,132 @@
-import { useAuth } from "@/app/src/auth/authContext";
 import { RequireAuth } from "@/app/src/auth/requireAuth";
-import { usePtStore } from "@/app/src/pt/PtStore";
+import { supabase } from "@/app/src/supabase/client";
 import { Screen } from "@/app/src/ui/screen";
+import { theme } from "@/app/src/ui/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useMemo, useState } from "react";
-import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import React from "react";
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
-const REST_OPTIONS = [30, 60, 90];
+const REST_OPTIONS = [30, 60, 90] as const;
+
+type DbExerciseRow = {
+  id: string;
+  day_id: string;
+  name: string;
+  sets: number;
+  reps: string;
+  rest_sec: number;
+  notes: string | null;
+  // joined
+  workout_days?: {
+    title: string;
+    weekday_key: string | null;
+  } | null;
+};
 
 export default function ClientExerciseDetail() {
-  const { exerciseId, weekday } = useLocalSearchParams<{
-    exerciseId: string;
-    weekday?: string; // es: "mon"
-  }>();
+  const { exerciseId } = useLocalSearchParams<{ exerciseId: string }>();
 
-  const { user } = useAuth();
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [row, setRow] = React.useState<DbExerciseRow | null>(null);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
 
-  const { getClientById, updateExercise } = usePtStore();
-  // Lato CLIENT non passiamo clientId in route: lo ricaviamo dall'utente loggato.
-  // Finché usi i mock (es. id "simone"), facciamo un fallback per non vedere schermo vuoto.
-  const effectiveClientId = user?.id ? String(user.id) : "simone";
+  // form state
+  const [sets, setSets] = React.useState("3");
+  const [reps, setReps] = React.useState("10");
+  const [kg, setKg] = React.useState(""); // UI only (non esiste ancora in DB)
+  const [restSec, setRestSec] = React.useState<number>(60);
+  const [notes, setNotes] = React.useState("");
 
-  const client = useMemo(() => {
-    return getClientById(effectiveClientId) ?? getClientById("simone");
-  }, [effectiveClientId, getClientById]);
+  React.useEffect(() => {
+    let alive = true;
 
-  const dayId = String(weekday ?? "mon"); // fallback lunedì
-  const exercise = useMemo(() => {
-    const day = client?.planDays?.find((d) => d.id === dayId);
-    return day?.exercises?.find((e) => e.id === String(exerciseId)) ?? null;
-  }, [client, dayId, exerciseId]);
+    (async () => {
+      try {
+        setLoading(true);
+        setLoadError(null);
 
-  const headerLabel = useMemo(() => {
+        // Leggiamo l'esercizio direttamente da Supabase.
+        // Non dipende da weekday "mon" ecc: l'id è UUID.
+        const { data, error } = await supabase
+          .from("workout_exercises")
+          .select("id, day_id, name, sets, reps, rest_sec, notes, workout_days(title, weekday_key)")
+          .eq("id", String(exerciseId))
+          .single();
+
+        if (error) throw error;
+        if (!alive) return;
+
+        const ex = (data ?? null) as DbExerciseRow | null;
+        setRow(ex);
+
+        // inizializza form
+        setSets(String(ex?.sets ?? 3));
+        setReps(String(ex?.reps ?? "10"));
+        setRestSec(Number(ex?.rest_sec ?? 60));
+        setNotes(String(ex?.notes ?? ""));
+      } catch (e: any) {
+        if (!alive) return;
+        setRow(null);
+        setLoadError(e?.message ?? "Errore nel caricamento");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [exerciseId]);
+
+  const headerLabel = React.useMemo(() => {
+    const title = row?.workout_days?.title;
+    if (title) return title;
+
+    const wk = row?.workout_days?.weekday_key;
     const dayLabel =
-      dayId === "mon" ? "Lunedì" :
-      dayId === "tue" ? "Martedì" :
-      dayId === "wed" ? "Mercoledì" :
-      dayId === "thu" ? "Giovedì" :
-      dayId === "fri" ? "Venerdì" :
-      dayId === "sat" ? "Sabato" : "Domenica";
-    return `${dayLabel} — ${exercise?.name ?? ""}`;
-  }, [dayId, exercise?.name]);
+      wk === "mon" ? "Lunedì" :
+        wk === "tue" ? "Martedì" :
+          wk === "wed" ? "Mercoledì" :
+            wk === "thu" ? "Giovedì" :
+              wk === "fri" ? "Venerdì" :
+                wk === "sat" ? "Sabato" :
+                  wk === "sun" ? "Domenica" :
+                    "Esercizio";
 
-  // form state (fallback safe)
-  const [sets, setSets] = useState(String(exercise?.sets ?? 3));
-  const [reps, setReps] = useState(String(exercise?.reps ?? "10"));
-  const [kg, setKg] = useState(""); // non esiste nel model ancora → lo mettiamo solo UI per ora
-  const [restSec, setRestSec] = useState<number>(exercise?.restSec ?? 60);
-  const [notes, setNotes] = useState(exercise?.notes ?? "");
+    return `${dayLabel} — ${row?.name ?? ""}`.trim();
+  }, [row]);
 
-  if (!client) {
-    return (
-      <RequireAuth role="client">
-        <Screen>
-          <Text style={{ color: "white", fontSize: 22, fontWeight: "800" }}>Cliente non trovato</Text>
-        </Screen>
-      </RequireAuth>
-    );
-  }
+  const onSave = async () => {
+    if (!row) return;
 
-  if (!exercise) {
-    return (
-      <RequireAuth role="client">
-        <Screen>
-          <Pressable onPress={() => router.back()} style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-            <Ionicons name="chevron-back" size={18} color="#fff" />
-            <Text style={{ color: "#fff" }}>Indietro</Text>
-          </Pressable>
-          <Text style={{ color: "white", fontSize: 22, fontWeight: "800", marginTop: 12 }}>
-            Esercizio non trovato
-          </Text>
-        </Screen>
-      </RequireAuth>
-    );
-  }
+    try {
+      setSaving(true);
 
-  const onSave = () => {
-    console.log("SALVA (CLIENT)", { effectiveClientId, dayId, exerciseId, sets, reps, kg, restSec, notes });
+      const patch = {
+        sets: Number(sets) || 0,
+        reps: String(reps ?? ""),
+        rest_sec: Number(restSec) || 0,
+        notes: String(notes ?? "").trim() === "" ? null : String(notes),
+      };
 
-    updateExercise(String(effectiveClientId), dayId, String(exerciseId), {
-      sets: Number(sets) || 0,
-      reps,
-      restSec,
-      notes,
-    });
+      const { error } = await supabase
+        .from("workout_exercises")
+        .update(patch)
+        .eq("id", row.id);
 
-    router.back();
+      if (error) throw error;
+
+      console.log("SALVA (CLIENT)", { exerciseId: row.id, ...patch, kg });
+      router.back();
+    } catch (e: any) {
+      console.log("ERRORE SALVATAGGIO", e);
+      // UX minima per ora
+      alert(e?.message ?? "Errore nel salvataggio");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -98,104 +138,141 @@ export default function ClientExerciseDetail() {
             onPress={() => router.back()}
             style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
           >
-            <Ionicons name="chevron-back" size={18} color="#fff" />
-            <Text style={{ color: "#fff", fontWeight: "700" }}>{headerLabel}</Text>
+            <Ionicons name="chevron-back" size={18} color={theme.colors.text} />
+            <Text style={{ color: theme.colors.text, fontWeight: "800" }}>{headerLabel}</Text>
           </Pressable>
 
-          {/* Placeholder media */}
-          <View style={{ borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" }}>
-            <Image
-              source={{ uri: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80" }}
-              style={{ width: "100%", height: 180, opacity: 0.9 }}
-              resizeMode="cover"
-            />
-          </View>
-
-          {/* Inputs */}
-          <Field label="Ripetizioni">
-            <TextInput
-              value={reps}
-              onChangeText={setReps}
-              keyboardType="default"
-              placeholder="Es: 8-10"
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              style={inputStyle}
-            />
-          </Field>
-
-          <Field label="Serie">
-            <TextInput
-              value={sets}
-              onChangeText={setSets}
-              keyboardType="number-pad"
-              placeholder="Es: 4"
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              style={inputStyle}
-            />
-          </Field>
-
-          <Field label="Kg">
-            <TextInput
-              value={kg}
-              onChangeText={setKg}
-              keyboardType="decimal-pad"
-              placeholder="Es: 60"
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              style={inputStyle}
-            />
-          </Field>
-
-          <Field label="Riposo">
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              {REST_OPTIONS.map((s) => {
-                const active = restSec === s;
-                return (
-                  <Pressable
-                    key={s}
-                    onPress={() => setRestSec(s)}
-                    style={{
-                      paddingVertical: 10,
-                      paddingHorizontal: 14,
-                      borderRadius: 999,
-                      borderWidth: 1,
-                      borderColor: active ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.12)",
-                      backgroundColor: active ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.03)",
-                    }}
-                  >
-                    <Text style={{ color: "#fff", fontWeight: "700" }}>{s}s</Text>
-                  </Pressable>
-                );
-              })}
+          {loading ? (
+            <View style={{ paddingVertical: 40, alignItems: "center" }}>
+              <ActivityIndicator />
+              <Text style={{ color: theme.colors.subtext, marginTop: 10 }}>Caricamento esercizio…</Text>
             </View>
-          </Field>
+          ) : !row ? (
+            <View style={{ paddingVertical: 20 }}>
+              <Text style={{ color: theme.colors.text, fontSize: 22, fontWeight: "900" }}>
+                Esercizio non trovato
+              </Text>
+              {loadError ? (
+                <Text style={{ color: theme.colors.subtext, marginTop: 8 }}>{loadError}</Text>
+              ) : null}
+            </View>
+          ) : (
+            <>
+              {/* Placeholder media */}
+              <View
+                style={{
+                  borderRadius: 18,
+                  overflow: "hidden",
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                }}
+              >
+                <Image
+                  source={{
+                    uri: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80",
+                  }}
+                  style={{ width: "100%", height: 180, opacity: 0.9 }}
+                  resizeMode="cover"
+                />
+              </View>
 
-          <Field label="Commento">
-            <TextInput
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Scrivi una nota per l’esercizio..."
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              multiline
-              style={[inputStyle, { minHeight: 110, textAlignVertical: "top" }]}
-            />
-          </Field>
+              {/* Inputs */}
+              <Field label="Ripetizioni">
+                <TextInput
+                  value={reps}
+                  onChangeText={setReps}
+                  keyboardType="default"
+                  placeholder="Es: 8-10"
+                  placeholderTextColor={theme.colors.subtext}
+                  style={inputStyle}
+                />
+              </Field>
 
-          {/* Save */}
-          <Pressable
-            onPress={onSave}
-            style={{
-              marginTop: 6,
-              height: 54,
-              borderRadius: 16,
-              alignItems: "center",
-              justifyContent: "center",
-              borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.18)",
-              backgroundColor: "rgba(255,255,255,0.06)",
-            }}
-          >
-            <Text style={{ color: "#fff", fontSize: 18, fontWeight: "800" }}>Salva</Text>
-          </Pressable>
+              <Field label="Serie">
+                <TextInput
+                  value={sets}
+                  onChangeText={setSets}
+                  keyboardType="number-pad"
+                  placeholder="Es: 4"
+                  placeholderTextColor={theme.colors.subtext}
+                  style={inputStyle}
+                />
+              </Field>
+
+              <Field label="Kg">
+                <TextInput
+                  value={kg}
+                  onChangeText={setKg}
+                  keyboardType="decimal-pad"
+                  placeholder="Es: 60"
+                  placeholderTextColor={theme.colors.subtext}
+                  style={inputStyle}
+                />
+              </Field>
+
+              <Field label="Riposo">
+                <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+                  {REST_OPTIONS.map((s) => {
+                    const active = restSec === s;
+                    return (
+                      <Pressable
+                        key={s}
+                        onPress={() => setRestSec(s)}
+                        style={{
+                          paddingVertical: 10,
+                          paddingHorizontal: 14,
+                          borderRadius: 999,
+                          borderWidth: 1,
+                          borderColor: active ? theme.colors.text : theme.colors.border,
+                          backgroundColor: active ? theme.colors.text : "transparent",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: active ? "#000" : theme.colors.text,
+                            fontWeight: "800",
+                          }}
+                        >
+                          {s}s
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </Field>
+
+              <Field label="Commento">
+                <TextInput
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="Scrivi una nota per l’esercizio..."
+                  placeholderTextColor={theme.colors.subtext}
+                  multiline
+                  style={[inputStyle, { minHeight: 110, textAlignVertical: "top" }]}
+                />
+              </Field>
+
+              {/* Save */}
+              <Pressable
+                onPress={onSave}
+                disabled={saving}
+                style={{
+                  marginTop: 6,
+                  height: 54,
+                  borderRadius: 16,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: "900" }}>
+                  {saving ? "Salvataggio…" : "Salva"}
+                </Text>
+              </Pressable>
+            </>
+          )}
         </ScrollView>
       </Screen>
     </RequireAuth>
@@ -205,7 +282,7 @@ export default function ClientExerciseDetail() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <View style={{ gap: 8 }}>
-      <Text style={{ color: "rgba(255,255,255,0.75)", fontWeight: "700" }}>{label}</Text>
+      <Text style={{ color: theme.colors.subtext, fontWeight: "800" }}>{label}</Text>
       {children}
     </View>
   );
@@ -215,8 +292,7 @@ const inputStyle = {
   height: 50,
   borderRadius: 14,
   paddingHorizontal: 14,
-  color: "#fff",
+  color: theme.colors.text,
   borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.12)",
-  backgroundColor: "rgba(255,255,255,0.04)",
+  borderColor: theme.colors.border,
 } as const;

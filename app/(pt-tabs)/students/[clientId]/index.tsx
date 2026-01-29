@@ -1,5 +1,6 @@
 import { RequireAuth } from "@/app/src/auth/requireAuth";
-import { usePtStore } from "@/app/src/pt/PtStore";
+import { supabase } from "@/app/src/supabase/client";
+import { deleteExercise } from "@/app/src/supabase/db";
 import { AppHeader } from "@/app/src/ui/appHeader";
 import { Card } from "@/app/src/ui/card";
 import { Screen } from "@/app/src/ui/screen";
@@ -7,7 +8,7 @@ import { theme } from "@/app/src/ui/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from "react-native";
 
 type WeekdayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
@@ -21,26 +22,46 @@ const WEEK: { key: WeekdayKey; label: string }[] = [
   { key: "sun", label: "Dom" },
 ];
 
+type DbClientRow = {
+  id: string;
+  name: string;
+};
+
+type DbDayRow = {
+  id: string;
+  client_id: string;
+  title: string;
+  weekday_key: string | null;
+  position: number;
+  created_at: string;
+};
+
+type DbExerciseRow = {
+  id: string;
+  day_id: string;
+  name: string;
+  sets: number;
+  reps: string;
+  rest_sec: number;
+  notes: string | null;
+  position: number;
+  created_at: string;
+};
+
 export default function StudentDetail() {
   const { clientId } = useLocalSearchParams<{ clientId: string }>();
-  const { getClientById, isHydrating } = usePtStore();
 
-  // ✅ tutti gli hook SEMPRE qui, prima di qualsiasi return
+  // ✅ hooks always first
   const [selectedDay, setSelectedDay] = React.useState<WeekdayKey>("mon");
   const [actionsOpen, setActionsOpen] = React.useState(false);
   const [activeExerciseId, setActiveExerciseId] = React.useState<string | null>(null);
 
-  if (isHydrating) {
-    return (
-      <RequireAuth role="pt">
-        <Screen>
-          <AppHeader title="Caricamento..." subtitle="Scheda allenamento" showBack />
-        </Screen>
-      </RequireAuth>
-    );
-  }
+  const [isLoadingClient, setIsLoadingClient] = React.useState(true);
+  const [client, setClient] = React.useState<DbClientRow | null>(null);
+  const [days, setDays] = React.useState<DbDayRow[]>([]);
 
-  const client = getClientById(String(clientId));
+  const [isLoadingExercises, setIsLoadingExercises] = React.useState(false);
+  const [exercises, setExercises] = React.useState<DbExerciseRow[]>([]);
 
   function openActions(exerciseId: string) {
     setActiveExerciseId(exerciseId);
@@ -54,7 +75,7 @@ export default function StudentDetail() {
 
   function onEdit() {
     if (!activeExerciseId) return;
-    console.log("MODIFICA", activeExerciseId);
+
     router.push({
       pathname: "/(pt-tabs)/students/[clientId]/exercise/[exerciseId]",
       params: {
@@ -63,33 +84,140 @@ export default function StudentDetail() {
         weekday: selectedDay,
       },
     });
+
     closeActions();
   }
 
-  function onDelete() {
+  async function onDelete() {
     if (!activeExerciseId) return;
-    console.log("ELIMINA", activeExerciseId);
-    // TODO: qui agganceremo la delete reale sullo store/db
-    closeActions();
+
+    const idToDelete = String(activeExerciseId);
+
+    try {
+      console.log("ELIMINA", idToDelete);
+      await deleteExercise(idToDelete);
+      setExercises((prev) => prev.filter((e) => e.id !== idToDelete));
+    } catch (error) {
+      console.log("[pt] delete error", error);
+    } finally {
+      closeActions();
+    }
   }
 
-  // ⚠️ Per ora “agganciamo” il giorno selezionato ai tuoi planDays.
-  // Assunzione: in planDays hai un campo "weekday" oppure un id coerente.
-  // Se non ce l'hai, sotto ti metto 2 opzioni per mapparlo.
-  const day =
-    client?.planDays?.find((d: any) => d.weekday === selectedDay) ??
-    client?.planDays?.find((d: any) => d.id === selectedDay) ??
-    null;
+  const activeDay = React.useMemo(() => {
+    return days.find((d) => d.weekday_key === selectedDay) ?? null;
+  }, [days, selectedDay]);
 
-  const exercises = day?.exercises ?? [];
+  // 1) load client + days from DB
+  React.useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        setIsLoadingClient(true);
+        setClient(null);
+        setDays([]);
+        setExercises([]);
+
+        const cid = String(clientId);
+        if (!cid) {
+          if (!alive) return;
+          setClient(null);
+          setDays([]);
+          return;
+        }
+
+        // client
+        const { data: c, error: cErr } = await supabase
+          .from("clients")
+          .select("id,name")
+          .eq("id", cid)
+          .single();
+
+        if (cErr) throw cErr;
+        if (!alive) return;
+        setClient((c ?? null) as DbClientRow | null);
+
+        // days
+        const { data: d, error: dErr } = await supabase
+          .from("workout_days")
+          .select("id,client_id,title,weekday_key,position,created_at")
+          .eq("client_id", cid)
+          .order("position", { ascending: true })
+          .order("created_at", { ascending: true });
+
+        if (dErr) throw dErr;
+        if (!alive) return;
+        setDays((d ?? []) as DbDayRow[]);
+      } catch (e) {
+        console.log("[pt] load client/days error", e);
+        if (!alive) return;
+        setClient(null);
+        setDays([]);
+        setExercises([]);
+      } finally {
+        if (alive) setIsLoadingClient(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [clientId]);
+
+  // 2) load exercises for active day
+  React.useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        setIsLoadingExercises(true);
+
+        if (!activeDay?.id) {
+          if (!alive) return;
+          setExercises([]);
+          return;
+        }
+
+        const { data: ex, error: exErr } = await supabase
+          .from("workout_exercises")
+          .select("id,day_id,name,sets,reps,rest_sec,notes,position,created_at")
+          .eq("day_id", activeDay.id)
+          .order("position", { ascending: true })
+          .order("created_at", { ascending: true });
+
+        if (exErr) throw exErr;
+        if (!alive) return;
+
+        setExercises((ex ?? []) as DbExerciseRow[]);
+      } catch (e) {
+        console.log("[pt] load exercises error", e);
+        if (!alive) return;
+        setExercises([]);
+      } finally {
+        if (alive) setIsLoadingExercises(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [activeDay?.id]);
 
   return (
     <RequireAuth role="pt">
       <Screen>
         <AppHeader title={client ? client.name : "Allievo"} showBack subtitle="Scheda allenamento" />
 
-        {!client ? (
-          <Text style={{ color: theme.colors.subtext }}>Allievo non trovato.</Text>
+        {isLoadingClient ? (
+          <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
+            <ActivityIndicator />
+            <Text style={{ color: theme.colors.subtext, marginTop: 10 }}>Caricamento…</Text>
+          </View>
+        ) : !client ? (
+          <Text style={{ color: theme.colors.subtext, paddingHorizontal: 16, marginTop: 8 }}>
+            Allievo non trovato.
+          </Text>
         ) : (
           <>
             {/* 7 tab giorni */}
@@ -126,8 +254,8 @@ export default function StudentDetail() {
             <View style={{ paddingHorizontal: 16, marginTop: 6 }}>
               <Pressable
                 onPress={() => {
-                  // Per ora placeholder: in step dopo ci agganciamo a add-exercise
-                  console.log("TODO: aggiungi esercizio");
+                  // qui poi collegheremo alla add-exercise
+                  console.log("TODO: aggiungi esercizio (pt)");
                 }}
                 style={{
                   flexDirection: "row",
@@ -147,12 +275,12 @@ export default function StudentDetail() {
 
             {/* Lista esercizi */}
             <View style={{ paddingHorizontal: 16, marginTop: 12, gap: 12 }}>
-              {exercises.length === 0 ? (
-                <Text style={{ color: theme.colors.subtext }}>
-                  Nessun esercizio per questo giorno.
-                </Text>
+              {isLoadingExercises ? (
+                <Text style={{ color: theme.colors.subtext }}>Caricamento esercizi…</Text>
+              ) : exercises.length === 0 ? (
+                <Text style={{ color: theme.colors.subtext }}>Nessun esercizio per questo giorno.</Text>
               ) : (
-                exercises.map((ex: any) => (
+                exercises.map((ex) => (
                   <Pressable
                     key={ex.id}
                     onPress={() => {
@@ -169,7 +297,7 @@ export default function StudentDetail() {
                   >
                     <Card>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                        {/* Placeholder immagine esercizio */}
+                        {/* Placeholder immagine */}
                         <View
                           style={{
                             width: 56,
@@ -178,19 +306,19 @@ export default function StudentDetail() {
                             backgroundColor: theme.colors.border,
                             alignItems: "center",
                             justifyContent: "center",
+                            flexShrink: 0,
                           }}
                         >
                           <Ionicons name="image-outline" size={22} color={theme.colors.subtext} />
                         </View>
 
-                        {/* Contenuto */}
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: theme.colors.text, fontWeight: "900", fontSize: 16 }}>
                             {ex.name}
                           </Text>
 
                           <Text style={{ color: theme.colors.subtext, marginTop: 6 }}>
-                            {ex.sets} serie × {ex.reps} reps • Rec {ex.restSec}s
+                            {ex.sets} serie × {ex.reps} reps • Rec {ex.rest_sec}s
                           </Text>
 
                           {ex.notes ? (
@@ -200,11 +328,9 @@ export default function StudentDetail() {
                           ) : null}
                         </View>
 
-                        {/* 3 puntini */}
                         <Pressable
                           onPress={(e: any) => {
                             e?.stopPropagation?.();
-                            console.log("APRI AZIONI ESERCIZIO", ex.id);
                             openActions(String(ex.id));
                           }}
                           style={{ padding: 6 }}
@@ -221,14 +347,8 @@ export default function StudentDetail() {
           </>
         )}
 
-        {/* Action sheet (cross-platform, works on Web + Expo Go) */}
-        <Modal
-          visible={actionsOpen}
-          transparent
-          animationType="fade"
-          onRequestClose={closeActions}
-        >
-          {/* Backdrop */}
+        {/* Action sheet */}
+        <Modal visible={actionsOpen} transparent animationType="fade" onRequestClose={closeActions}>
           <Pressable
             onPress={closeActions}
             style={{
@@ -237,7 +357,6 @@ export default function StudentDetail() {
               justifyContent: "flex-end",
             }}
           >
-            {/* Sheet */}
             <View
               style={{
                 borderTopLeftRadius: 18,
@@ -259,45 +378,17 @@ export default function StudentDetail() {
                 />
               </View>
 
-              <Pressable
-                onPress={(e) => {
-                  e?.stopPropagation?.();
-                  onEdit();
-                }}
-                style={{
-                  paddingVertical: 14,
-                  paddingHorizontal: 12,
-                  borderRadius: 12,
-                }}
-              >
+              <Pressable onPress={onEdit} style={{ paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12 }}>
                 <Text style={{ color: theme.colors.text, fontWeight: "900", fontSize: 16 }}>Modifica</Text>
               </Pressable>
 
-              <Pressable
-                onPress={(e) => {
-                  e?.stopPropagation?.();
-                  onDelete();
-                }}
-                style={{
-                  paddingVertical: 14,
-                  paddingHorizontal: 12,
-                  borderRadius: 12,
-                }}
-              >
+              <Pressable onPress={onDelete} style={{ paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12 }}>
                 <Text style={{ color: "#ff5a5a", fontWeight: "900", fontSize: 16 }}>Elimina</Text>
               </Pressable>
 
               <Pressable
-                onPress={(e) => {
-                  e?.stopPropagation?.();
-                  closeActions();
-                }}
-                style={{
-                  marginTop: 6,
-                  paddingVertical: 14,
-                  paddingHorizontal: 12,
-                  borderRadius: 12,
-                }}
+                onPress={closeActions}
+                style={{ marginTop: 6, paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12 }}
               >
                 <Text style={{ color: theme.colors.subtext, fontWeight: "800", fontSize: 15 }}>Annulla</Text>
               </Pressable>
