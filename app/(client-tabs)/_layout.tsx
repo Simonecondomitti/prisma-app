@@ -1,44 +1,15 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
+import { AppFooterTabBar } from "../src/ui/footer";
 
 export default function ClientTabsLayout() {
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: "#111",
-        tabBarStyle: { display: "none" }, // hide built-in tab bar in favor of global footer
-      }}
+      screenOptions={{ headerShown: false }}
+      tabBar={(props) => <AppFooterTabBar {...props} variant="client" />}
     >
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" color={color} size={size} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="exercises"
-        options={{
-          title: "Esercizi",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="barbell" color={color} size={size} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profilo",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" color={color} size={size} />
-          ),
-        }}
-      />
+      <Tabs.Screen name="home" />
+      <Tabs.Screen name="exercises" />
+      <Tabs.Screen name="profile" />
     </Tabs>
   );
 }

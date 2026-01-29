@@ -17,13 +17,13 @@ import {
 export default function LoginScreen() {
   const { login } = useAuth();
 
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
   const onSubmit = async () => {
     setErr(null);
-    const ok = await login(username, password);
+    const ok = await login(email, password);
     if (!ok) {
       setErr("Credenziali non valide");
       return;
@@ -76,11 +76,14 @@ export default function LoginScreen() {
           </Text>
 
           <TextInput
-            value={username}
-            onChangeText={setUsername}
-            placeholder="Username"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Email"
             placeholderTextColor="rgba(255,255,255,0.45)"
             autoCapitalize="none"
+            keyboardType="email-address"
+            autoCorrect={false}
+            textContentType="emailAddress"
             style={{
               backgroundColor: theme.colors.surface2,
               borderWidth: 1,
@@ -97,6 +100,9 @@ export default function LoginScreen() {
             placeholder="Password"
             placeholderTextColor="rgba(255,255,255,0.45)"
             secureTextEntry
+            textContentType="password"
+            autoCapitalize="none"
+            autoCorrect={false}
             style={{
               backgroundColor: theme.colors.surface2,
               borderWidth: 1,
@@ -172,8 +178,8 @@ export default function LoginScreen() {
 
           {/* helper dev (puoi toglierlo dopo) */}
           <View style={{ marginTop: 14, gap: 4 }}>
-            <Text style={{ color: theme.colors.subtext }}>PT: pt / pt123</Text>
-            <Text style={{ color: theme.colors.subtext }}>Cliente: c1 / c1123</Text>
+            <Text style={{ color: theme.colors.subtext }}>PT: pt@prismafitness.it / pt123</Text>
+            <Text style={{ color: theme.colors.subtext }}>Cliente: cliente@prismafitness.it / cliente123</Text>
           </View>
         </View>
       </KeyboardAvoidingView>

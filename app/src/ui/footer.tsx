@@ -1,60 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router, useSegments } from "expo-router";
+import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
-import { useAuth } from "../auth/authContext";
 import { theme } from "./theme";
 
-export function AppFooter() {
-  const segments = useSegments();
-  const { user } = useAuth();
+type Variant = "client" | "pt";
 
-  // hide footer on auth routes (login)
-  if (segments[0] === "(auth)") return null;
-
-  const isPt = user?.role === "pt";
-
-  // determine selected tab by mapping known route segments to tab keys
-  // ignore expo-router grouping segments like "(client)" or "(pt-tabs)"
-  const segs = segments.filter((s) => !!s && !String(s).startsWith("(")).map(String);
-
-  const segmentToTabMap: Record<string, string> = {
-    home: "home",
-    day: "exercises",
-    exercise: "exercises",
-    exercises: "exercises",
-    client: "students",
-    clients: "students",
-    students: "students",
-    profile: "profile",
-  };
-
-  let current = "home";
-  for (const s of segs) {
-    if (segmentToTabMap[s]) {
-      current = segmentToTabMap[s];
-      break;
-    }
-  }
-
-  const TabButton = ({ name, label, icon }: { name: string; label: string; icon: React.ReactNode }) => {
-    const selected = current === name;
-    return (
-      <Pressable
-        onPress={() => {
-          // decide prefix based on role
-          const prefix = isPt ? "(pt-tabs)" : "(client-tabs)";
-          const path = "/" + prefix + "/" + name;
-          router.push(path as any);
-        }}
-        style={{ flex: 1, alignItems: "center", paddingVertical: 10 }}
-      >
-        {React.cloneElement(icon as any, { color: selected ? theme.colors.text : theme.colors.subtext })}
-        <Text style={{ color: selected ? theme.colors.text : theme.colors.subtext, fontSize: 12, marginTop: 4 }}>{label}</Text>
-      </Pressable>
-    );
-  };
-
+export function AppFooterTabBar({
+  state,
+  descriptors,
+  navigation,
+  variant,
+}: BottomTabBarProps & { variant: Variant }) {
+  const iconMap: Record<string, keyof typeof Ionicons.glyphMap> =
+    variant === "pt"
+      ? { home: "home", exercises: "barbell", students: "people-outline", profile: "person" }
+      : { home: "home", exercises: "barbell", profile: "person" };
+console.log("TAB ROUTES:", state.routes.map(r => r.name));
   return (
     <View
       style={{
@@ -65,21 +27,56 @@ export function AppFooter() {
         paddingHorizontal: 8,
       }}
     >
-      <TabButton name="home" label="Home" icon={<Ionicons name="home" size={20} />} />
-      <TabButton name="exercises" label={isPt ? "Gestione" : "Esercizi"} icon={<Ionicons name="barbell" size={20} />} />
+      {state.routes.map((route, index) => {
+        // ✅ nascondi automaticamente eventuali route non tab
+        if (!iconMap[route.name]) return null;
 
-      {isPt ? (
-        // for PT show both Clienti and Profilo
-        <>
-          <TabButton name="students" label="Clienti" icon={<Ionicons name="people-outline" size={20} />} />
-          <TabButton name="profile" label="Profilo" icon={<Ionicons name="person" size={20} />} />
-        </>
-      ) : (
-        // for clients show only Profilo as the 3rd tab
-        <TabButton name="profile" label="Profilo" icon={<Ionicons name="person" size={20} />} />
-      )}
+        const focused = state.index === index;
+        const options = descriptors[route.key]?.options ?? {};
+
+        const label =
+          typeof options.tabBarLabel === "string"
+            ? options.tabBarLabel
+            : typeof options.title === "string"
+            ? options.title
+            : route.name;
+
+        const onPress = () => {
+          const event = navigation.emit({
+            type: "tabPress",
+            target: route.key,
+            canPreventDefault: true,
+          });
+
+          if (!focused && !event.defaultPrevented) {
+            // ✅ questo mantiene history e back corretto
+            navigation.navigate(route.name as never);
+          }
+        };
+
+        return (
+          <Pressable
+            key={route.key}
+            onPress={onPress}
+            style={{ flex: 1, alignItems: "center", paddingVertical: 10 }}
+          >
+            <Ionicons
+              name={iconMap[route.name]}
+              size={20}
+              color={focused ? theme.colors.text : theme.colors.subtext}
+            />
+            <Text
+              style={{
+                color: focused ? theme.colors.text : theme.colors.subtext,
+                fontSize: 12,
+                marginTop: 4,
+              }}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
-
-export default AppFooter;

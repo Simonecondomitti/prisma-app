@@ -1,10 +1,9 @@
+import { RequireAuth } from "@/app/src/auth/requireAuth";
+import { usePtStore } from "@/app/src/pt/PtStore";
+import { AppHeader } from "@/app/src/ui/appHeader";
+import { RowLink } from "@/app/src/ui/rowLink";
+import { Screen } from "@/app/src/ui/screen";
 import { router, useLocalSearchParams } from "expo-router";
-
-import { RequireAuth } from "../../../src/auth/requireAuth";
-import { usePtStore } from "../../../src/pt/PtStore";
-import { AppHeader } from "../../../src/ui/appHeader";
-import { RowLink } from "../../../src/ui/rowLink";
-import { Screen } from "../../../src/ui/screen";
 
 const WEEKDAYS = [
   { key: "mon", label: "Lunedì" },

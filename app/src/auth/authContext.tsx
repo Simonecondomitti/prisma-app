@@ -1,5 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { supabase } from "../supabase/client";
 
 export type Role = "client" | "pt";
 
@@ -7,6 +7,7 @@ export type AuthUser = {
   id: string;
   name: string;
   role: Role;
+  email?: string;
 };
 
 type AuthContextValue = {
@@ -17,72 +18,90 @@ type AuthContextValue = {
 };
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const STORAGE_KEY = "palestra_app_user_v1";
-
-type MockAccount = {
-  username: string;
-  password: string;
-  id: string;      // per client deve essere c1/c2/c3 (come i Client mock)
-  name: string;
-  role: Role;
-};
-
-const MOCK_ACCOUNTS: MockAccount[] = [
-  { username: "pt", password: "pt123", id: "pt_1", name: "Cosimo PT", role: "pt" },
-
-  // clienti (id = clientId del PtStore!)
-  { username: "c1", password: "c1123", id: "c1", name: "Mario Rossi", role: "client" },
-  { username: "c2", password: "c2123", id: "c2", name: "Luigi Bianchi", role: "client" },
-  { username: "c3", password: "c3123", id: "c3", name: "Giulia Verdi", role: "client" },
-  { username: "simone", password: "simone", id: "simone", name: "Simone Cliente", role: "client" },
-];
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isHydrating, setIsHydrating] = useState(true);
 
-  // 1) All'avvio: leggi da storage e ripristina user
+  async function buildUserFromSupabase(userId: string, email?: string | null) {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("role, full_name")
+      .eq("id", userId)
+      .single();
+
+    // Se il profilo non esiste ancora, fallback su client (ma in teoria lo stai creando a mano in SQL)
+    const role = (profile?.role as Role) ?? "client";
+    const name = profile?.full_name ?? email ?? "Utente";
+
+    if (error) {
+      // Non bloccare il login se il profilo non è leggibile per qualche motivo
+      return { id: userId, name: email ?? "Utente", role: "client" as Role, email: email ?? undefined };
+    }
+
+    return { id: userId, name, role, email: email ?? undefined };
+  }
+
   useEffect(() => {
+    let alive = true;
+
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const parsed: AuthUser = JSON.parse(raw);
-          setUser(parsed);
+        const { data } = await supabase.auth.getSession();
+        const session = data.session;
+
+        if (!alive) return;
+
+        if (!session?.user) {
+          setUser(null);
+          return;
         }
-      } catch (e) {
-        // se storage corrotto, riparti pulito
-        await AsyncStorage.removeItem(STORAGE_KEY);
-        setUser(null);
+
+        const u = await buildUserFromSupabase(session.user.id, session.user.email);
+        if (!alive) return;
+        setUser(u);
       } finally {
-        setIsHydrating(false);
+        if (alive) setIsHydrating(false);
       }
     })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!alive) return;
+      setIsHydrating(true);
+
+      try {
+        if (!session?.user) {
+          setUser(null);
+          return;
+        }
+
+        const u = await buildUserFromSupabase(session.user.id, session.user.email);
+        if (!alive) return;
+        setUser(u);
+      } finally {
+        if (alive) setIsHydrating(false);
+      }
+    });
+
+    return () => {
+      alive = false;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
-  // 2) Login: set user + salva
   const login = async (username: string, password: string) => {
-    const account = MOCK_ACCOUNTS.find(
-      (a) => a.username === username.trim() && a.password === password
-    );
+    // Per compatibilità: `username` qui è l'email
+    const email = username.trim();
 
-    if (!account) return false;
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return false;
 
-    const mockUser: AuthUser = {
-      id: account.id,
-      name: account.name,
-      role: account.role,
-    };
-
-    setUser(mockUser);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(mockUser));
+    // Lo user verrà popolato dall'onAuthStateChange
     return true;
   };
 
-  // 3) Logout: reset + cancella
   const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    await AsyncStorage.removeItem(STORAGE_KEY);
   };
 
   const value = useMemo(() => ({ user, isHydrating, login, logout }), [user, isHydrating]);
