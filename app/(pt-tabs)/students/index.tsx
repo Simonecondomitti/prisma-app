@@ -22,7 +22,12 @@ export default function PTExercisesTab() {
             title={c.name}
             subtitle={c.notes ?? ""}
             right={c.status === "active" ? "Attivo" : "In pausa"}
-            onPress={() => router.push(`/(pt)/client/${c.id}`)}
+            onPress={() =>
+              router.push({
+                pathname: "/(pt-tabs)/students/[clientId]",
+                params: { clientId: String(c.id) },
+              })
+            }
           />
         ))}
       </Screen>

@@ -9,15 +9,20 @@ export type WorkoutExercise = {
     description?: string;    // breve spiegazione
 };
 
+
+export type WeekdayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
 export type WorkoutDay = {
-    id: string;
-    title: string; // es: "Lunedì - Petto/Tricipiti"
+    id: string;          // es "mon" oppure "mon_123" se creato dopo
+    weekday?: WeekdayKey; // 👈 nuovo (opzionale per non rompere vecchi dati)
+    title: string;
     exercises: WorkoutExercise[];
 };
 
 export const MOCK_DAYS: WorkoutDay[] = [
     {
         id: "mon",
+        weekday: "mon",
         title: "Lunedì — Petto / Tricipiti",
         exercises: [
             {
@@ -35,6 +40,7 @@ export const MOCK_DAYS: WorkoutDay[] = [
     },
     {
         id: "wed",
+        weekday: "wed",
         title: "Mercoledì — Schiena / Bicipiti",
         exercises: [
             { id: "ex5", name: "Lat machine", sets: 4, reps: "10", restSec: 90 },
@@ -44,6 +50,7 @@ export const MOCK_DAYS: WorkoutDay[] = [
     },
     {
         id: "fri",
+        weekday: "fri",
         title: "Venerdì — Gambe / Spalle",
         exercises: [
             { id: "ex8", name: "Leg press", sets: 4, reps: "12", restSec: 120 },

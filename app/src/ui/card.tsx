@@ -10,7 +10,6 @@ export function Card({ children }: { children: React.ReactNode }) {
         borderColor: theme.colors.border,
         borderRadius: theme.radius.lg,
         padding: theme.spacing.l,
-        backgroundColor: theme.colors.card,
         gap: 6,
       }}
     >

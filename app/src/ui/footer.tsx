@@ -16,7 +16,6 @@ export function AppFooterTabBar({
     variant === "pt"
       ? { home: "home", exercises: "barbell", students: "people-outline", profile: "person" }
       : { home: "home", exercises: "barbell", profile: "person" };
-console.log("TAB ROUTES:", state.routes.map(r => r.name));
   return (
     <View
       style={{

@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Client, MOCK_CLIENTS } from "../mock/clients";
-import { WorkoutExercise } from "../mock/workout";
+import { WeekdayKey, WorkoutDay, WorkoutExercise } from "../mock/workout";
 
 type PtStoreValue = {
   clients: Client[];
@@ -16,12 +16,17 @@ type PtStoreValue = {
 
   addExercise: (clientId: string, dayId: string, exercise: WorkoutExercise) => void;
   removeExercise: (clientId: string, dayId: string, exerciseId: string) => void;
-  addDay: (clientId: string, weekdayKey: string, weekdayLabel: string) => string; removeDay: (clientId: string, dayId: string) => void;
+
+  addDay: (clientId: string, weekdayKey: WeekdayKey, weekdayLabel: string) => string;
+  removeDay: (clientId: string, dayId: string) => void;
+
   updateDayTitle: (clientId: string, dayId: string, title: string) => void;
+
   isHydrating: boolean;
   resetStore: () => Promise<void>;
 };
-const STORE_VERSION = 1; // quando cambi schema -> 2, 3, ...
+
+const STORE_VERSION = 1;
 const STORAGE_KEY = "palestra_app_ptstore_clients_v1";
 const PtStoreContext = createContext<PtStoreValue | undefined>(undefined);
 
@@ -34,20 +39,54 @@ type PersistedStore = {
   clients: Client[];
 };
 
+const WEEKDAYS: { key: WeekdayKey; label: string }[] = [
+  { key: "mon", label: "Lunedì" },
+  { key: "tue", label: "Martedì" },
+  { key: "wed", label: "Mercoledì" },
+  { key: "thu", label: "Giovedì" },
+  { key: "fri", label: "Venerdì" },
+  { key: "sat", label: "Sabato" },
+  { key: "sun", label: "Domenica" },
+];
+
+function inferWeekdayFromIdOrTitle(day: Partial<WorkoutDay>): WeekdayKey | undefined {
+  const id = String(day.id ?? "");
+  const idPrefix = id.split("_")[0]; // "mon_123" -> "mon"
+  if (["mon", "tue", "wed", "thu", "fri", "sat", "sun"].includes(idPrefix)) {
+    return idPrefix as WeekdayKey;
+  }
+
+  const title = (day.title ?? "").toLowerCase();
+  if (title.startsWith("luned")) return "mon";
+  if (title.startsWith("marted")) return "tue";
+  if (title.startsWith("mercoled")) return "wed";
+  if (title.startsWith("gioved")) return "thu";
+  if (title.startsWith("venerd")) return "fri";
+  if (title.startsWith("sabat")) return "sat";
+  if (title.startsWith("domenic")) return "sun";
+  return undefined;
+}
+
+function normalizeClientDays(client: Client): Client {
+  return {
+    ...client,
+    planDays: (client.planDays ?? []).map((d) => {
+      if (d.weekday) return d;
+      return { ...d, weekday: inferWeekdayFromIdOrTitle(d) };
+    }),
+  };
+}
+
 function migrate(payload: any): PersistedStore {
-  // Caso legacy: in passato hai salvato direttamente Client[]
+  // legacy: salvato direttamente Client[]
   if (Array.isArray(payload)) {
-    return { version: 1, clients: payload };
+    const clients = payload.map(normalizeClientDays);
+    return { version: 1, clients };
   }
 
   const version = payload?.version ?? 1;
   let clients: Client[] = payload?.clients ?? [];
-
-  // 👉 Qui in futuro aggiungerai migrazioni tipo:
-  // if (version === 1) {
-  //   clients = clients.map(c => ({ ...c, newField: default }))
-  //   return { version: 2, clients };
-  // }
+  clients = clients.map(normalizeClientDays);
 
   return { version, clients };
 }
@@ -55,6 +94,7 @@ function migrate(payload: any): PersistedStore {
 export function PtStoreProvider({ children }: { children: React.ReactNode }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [isHydrating, setIsHydrating] = useState(true);
+
   useEffect(() => {
     (async () => {
       try {
@@ -64,11 +104,11 @@ export function PtStoreProvider({ children }: { children: React.ReactNode }) {
           const migrated = migrate(parsed);
           setClients(migrated.clients);
         } else {
-          setClients(deepClone(MOCK_CLIENTS));
+          // mock iniziali normalizzati
+          setClients(deepClone(MOCK_CLIENTS).map(normalizeClientDays));
         }
       } catch {
-        // se storage corrotto, riparti dai mock
-        setClients(deepClone(MOCK_CLIENTS));
+        setClients(deepClone(MOCK_CLIENTS).map(normalizeClientDays));
         await AsyncStorage.removeItem(STORAGE_KEY);
       } finally {
         setIsHydrating(false);
@@ -82,9 +122,10 @@ export function PtStoreProvider({ children }: { children: React.ReactNode }) {
   }, [clients, isHydrating]);
 
   const resetStore = async () => {
-    setClients(deepClone(MOCK_CLIENTS));
+    setClients(deepClone(MOCK_CLIENTS).map(normalizeClientDays));
     await AsyncStorage.removeItem(STORAGE_KEY);
   };
+
   const getClientById = (id: string) => clients.find((c) => c.id === id) ?? null;
 
   const updateExercise: PtStoreValue["updateExercise"] = (clientId, dayId, exerciseId, patch) => {
@@ -97,9 +138,7 @@ export function PtStoreProvider({ children }: { children: React.ReactNode }) {
             if (d.id !== dayId) return d;
             return {
               ...d,
-              exercises: d.exercises.map((e) =>
-                e.id === exerciseId ? { ...e, ...patch } : e
-              ),
+              exercises: d.exercises.map((e) => (e.id === exerciseId ? { ...e, ...patch } : e)),
             };
           }),
         };
@@ -122,7 +161,7 @@ export function PtStoreProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  const removeExercise = (clientId: string, dayId: string, exerciseId: string) => {
+  const removeExercise: PtStoreValue["removeExercise"] = (clientId, dayId, exerciseId) => {
     setClients((prev) =>
       prev.map((c) => {
         if (c.id !== clientId) return c;
@@ -130,10 +169,7 @@ export function PtStoreProvider({ children }: { children: React.ReactNode }) {
           ...c,
           planDays: c.planDays.map((d) => {
             if (d.id !== dayId) return d;
-            return {
-              ...d,
-              exercises: d.exercises.filter((e) => e.id !== exerciseId),
-            };
+            return { ...d, exercises: d.exercises.filter((e) => e.id !== exerciseId) };
           }),
         };
       })
@@ -147,66 +183,57 @@ export function PtStoreProvider({ children }: { children: React.ReactNode }) {
       prev.map((c) => {
         if (c.id !== clientId) return c;
 
-        // opzionale: evita duplicati dello stesso giorno della settimana
-        const alreadyExists = c.planDays.some((d) => d.id.startsWith(`${weekdayKey}_`));
+        // evita duplicati dello stesso weekday (opzionale)
+        const alreadyExists = c.planDays.some((d) => d.weekday === weekdayKey);
         if (alreadyExists) return c;
 
-        return {
-          ...c,
-          planDays: [
-            ...c.planDays,
-            {
-              id: newDayId,
-              title: `${weekdayLabel}`,
-              exercises: [],
-            },
-          ],
+        const newDay: WorkoutDay = {
+          id: newDayId,
+          weekday: weekdayKey,
+          title: weekdayLabel,
+          exercises: [],
         };
+
+        return { ...c, planDays: [...c.planDays, newDay] };
       })
     );
 
     return newDayId;
   };
 
-  const removeDay = (clientId: string, dayId: string) => {
+  const removeDay: PtStoreValue["removeDay"] = (clientId, dayId) => {
     setClients((prev) =>
       prev.map((c) => {
         if (c.id !== clientId) return c;
-        return {
-          ...c,
-          planDays: c.planDays.filter((d) => d.id !== dayId),
-        };
+        return { ...c, planDays: c.planDays.filter((d) => d.id !== dayId) };
       })
     );
   };
 
-  const updateDayTitle = (clientId: string, dayId: string, title: string) => {
+  const updateDayTitle: PtStoreValue["updateDayTitle"] = (clientId, dayId, title) => {
     setClients((prev) =>
       prev.map((c) => {
         if (c.id !== clientId) return c;
-        return {
-          ...c,
-          planDays: c.planDays.map((d) => (d.id === dayId ? { ...d, title } : d)),
-        };
+        return { ...c, planDays: c.planDays.map((d) => (d.id === dayId ? { ...d, title } : d)) };
       })
     );
   };
 
   const value = useMemo(
-  () => ({
-    clients,
-    isHydrating,
-    resetStore,
-    getClientById,
-    updateExercise,
-    addExercise,
-    removeExercise,
-    addDay,
-    removeDay,
-    updateDayTitle,
-  }),
-  [clients, isHydrating]
-);
+    () => ({
+      clients,
+      isHydrating,
+      resetStore,
+      getClientById,
+      updateExercise,
+      addExercise,
+      removeExercise,
+      addDay,
+      removeDay,
+      updateDayTitle,
+    }),
+    [clients, isHydrating]
+  );
 
   return <PtStoreContext.Provider value={value}>{children}</PtStoreContext.Provider>;
 }
