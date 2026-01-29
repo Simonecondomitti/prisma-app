@@ -24,15 +24,23 @@ const WEEK: { key: WeekdayKey; label: string }[] = [
 export default function StudentDetail() {
   const { clientId } = useLocalSearchParams<{ clientId: string }>();
   const { getClientById, isHydrating } = usePtStore();
-  if (isHydrating) return null;
 
-  const client = getClientById(String(clientId));
-
-  // default lunedì
+  // ✅ tutti gli hook SEMPRE qui, prima di qualsiasi return
   const [selectedDay, setSelectedDay] = React.useState<WeekdayKey>("mon");
-
   const [actionsOpen, setActionsOpen] = React.useState(false);
   const [activeExerciseId, setActiveExerciseId] = React.useState<string | null>(null);
+
+  if (isHydrating) {
+    return (
+      <RequireAuth role="pt">
+        <Screen>
+          <AppHeader title="Caricamento..." subtitle="Scheda allenamento" showBack />
+        </Screen>
+      </RequireAuth>
+    );
+  }
+
+  const client = getClientById(String(clientId));
 
   function openActions(exerciseId: string) {
     setActiveExerciseId(exerciseId);
@@ -160,8 +168,23 @@ export default function StudentDetail() {
                     style={{ borderRadius: theme.radius.lg }}
                   >
                     <Card>
-                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                        <View style={{ flex: 1, paddingRight: 10 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                        {/* Placeholder immagine esercizio */}
+                        <View
+                          style={{
+                            width: 56,
+                            height: 56,
+                            borderRadius: 10,
+                            backgroundColor: theme.colors.border,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Ionicons name="image-outline" size={22} color={theme.colors.subtext} />
+                        </View>
+
+                        {/* Contenuto */}
+                        <View style={{ flex: 1 }}>
                           <Text style={{ color: theme.colors.text, fontWeight: "900", fontSize: 16 }}>
                             {ex.name}
                           </Text>
@@ -180,7 +203,6 @@ export default function StudentDetail() {
                         {/* 3 puntini */}
                         <Pressable
                           onPress={(e: any) => {
-                            // Evita che il tap sui 3 puntini apra anche la pagina dettaglio
                             e?.stopPropagation?.();
                             console.log("APRI AZIONI ESERCIZIO", ex.id);
                             openActions(String(ex.id));
