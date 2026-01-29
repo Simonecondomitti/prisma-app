@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 
 type WeekdayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
@@ -73,6 +74,22 @@ export default function StudentDetail() {
     setActiveExerciseId(null);
   }
 
+  const activeDay = React.useMemo(() => {
+    return days.find((d) => d.weekday_key === selectedDay) ?? null;
+  }, [days, selectedDay]);
+
+  const fetchExercises = React.useCallback(async (dayId: string) => {
+    const { data: ex, error: exErr } = await supabase
+      .from("workout_exercises")
+      .select("id,day_id,name,sets,reps,rest_sec,notes,position,created_at")
+      .eq("day_id", dayId)
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (exErr) throw exErr;
+    setExercises((ex ?? []) as DbExerciseRow[]);
+  }, []);
+
   function onEdit() {
     if (!activeExerciseId) return;
 
@@ -82,6 +99,7 @@ export default function StudentDetail() {
         clientId: String(clientId),
         exerciseId: String(activeExerciseId),
         weekday: selectedDay,
+        dayId: String(activeDay?.id ?? ""),
       },
     });
 
@@ -103,10 +121,6 @@ export default function StudentDetail() {
       closeActions();
     }
   }
-
-  const activeDay = React.useMemo(() => {
-    return days.find((d) => d.weekday_key === selectedDay) ?? null;
-  }, [days, selectedDay]);
 
   // 1) load client + days from DB
   React.useEffect(() => {
@@ -179,17 +193,7 @@ export default function StudentDetail() {
           return;
         }
 
-        const { data: ex, error: exErr } = await supabase
-          .from("workout_exercises")
-          .select("id,day_id,name,sets,reps,rest_sec,notes,position,created_at")
-          .eq("day_id", activeDay.id)
-          .order("position", { ascending: true })
-          .order("created_at", { ascending: true });
-
-        if (exErr) throw exErr;
-        if (!alive) return;
-
-        setExercises((ex ?? []) as DbExerciseRow[]);
+        await fetchExercises(activeDay.id);
       } catch (e) {
         console.log("[pt] load exercises error", e);
         if (!alive) return;
@@ -202,7 +206,31 @@ export default function StudentDetail() {
     return () => {
       alive = false;
     };
-  }, [activeDay?.id]);
+  }, [activeDay?.id, fetchExercises]);
+
+  // 🔁 refresh when we come back from the exercise screen
+  useFocusEffect(
+    React.useCallback(() => {
+      let alive = true;
+
+      (async () => {
+        try {
+          if (!activeDay?.id) return;
+          setIsLoadingExercises(true);
+          await fetchExercises(activeDay.id);
+        } catch (e) {
+          console.log("[pt] focus refresh exercises error", e);
+          if (alive) setExercises([]);
+        } finally {
+          if (alive) setIsLoadingExercises(false);
+        }
+      })();
+
+      return () => {
+        alive = false;
+      };
+    }, [activeDay?.id, fetchExercises])
+  );
 
   return (
     <RequireAuth role="pt">
@@ -254,7 +282,6 @@ export default function StudentDetail() {
             <View style={{ paddingHorizontal: 16, marginTop: 6 }}>
               <Pressable
                 onPress={() => {
-                  // qui poi collegheremo alla add-exercise
                   console.log("TODO: aggiungi esercizio (pt)");
                 }}
                 style={{
@@ -290,6 +317,7 @@ export default function StudentDetail() {
                           clientId: String(clientId),
                           exerciseId: String(ex.id),
                           weekday: selectedDay,
+                          dayId: String(ex.day_id),
                         },
                       });
                     }}
@@ -322,9 +350,7 @@ export default function StudentDetail() {
                           </Text>
 
                           {ex.notes ? (
-                            <Text style={{ color: theme.colors.subtext, marginTop: 6 }}>
-                              Note: {ex.notes}
-                            </Text>
+                            <Text style={{ color: theme.colors.subtext, marginTop: 6 }}>Note: {ex.notes}</Text>
                           ) : null}
                         </View>
 
